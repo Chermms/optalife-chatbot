@@ -8,14 +8,15 @@
 import os
 import requests
 from flask import Flask, request, jsonify
-from groq_client import obter_resposta_ia
+from groq_client import obter_resposta_ia, triagem_foi_concluida, extrair_dados_triagem
 from memoria import salvar_mensagem, obter_historico
+from email_sender import enviar_triagem_por_email
 
 app = Flask(__name__)
 
-WHATSAPP_TOKEN  = os.environ.get("WHATSAPP_TOKEN")
-VERIFY_TOKEN    = os.environ.get("VERIFY_TOKEN")
-PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID")
+WHATSAPP_TOKEN   = os.environ.get("WHATSAPP_TOKEN")
+VERIFY_TOKEN     = os.environ.get("VERIFY_TOKEN")
+PHONE_NUMBER_ID  = os.environ.get("PHONE_NUMBER_ID")
 ATENDENTE_NUMERO = os.environ.get("ATENDENTE_NUMERO", "5521994404545")  # Isabela OptaLife
 
 
@@ -89,11 +90,10 @@ def receber_mensagem():
         if "messages" not in value:
             return jsonify({"status": "sem mensagem"}), 200
 
-        mensagem_obj   = value["messages"][0]
-        numero         = mensagem_obj["from"]
-        tipo           = mensagem_obj["type"]
+        mensagem_obj = value["messages"][0]
+        numero       = mensagem_obj["from"]
+        tipo         = mensagem_obj["type"]
 
-        # Ignora mensagens duplicadas (Meta pode reenviar)
         message_id = mensagem_obj.get("id", "")
         print(f"📩 [{message_id}] Mensagem de {numero} ({tipo})")
 
@@ -122,6 +122,16 @@ def receber_mensagem():
         historico = obter_historico(numero)
         resposta  = obter_resposta_ia(historico)
         salvar_mensagem(numero, "assistant", resposta)
+
+        # ── Verifica se a triagem foi concluída e dispara e-mail ──
+        if triagem_foi_concluida(resposta):
+            print(f"📋 Triagem concluída para {numero}. Extraindo dados e enviando e-mail...")
+            dados_triagem = extrair_dados_triagem(historico)
+            dados_triagem["numero"] = numero  # adiciona o número do WhatsApp
+            enviar_triagem_por_email(dados_triagem)
+
+            # Remove o marcador antes de enviar a resposta ao paciente
+            resposta = resposta.replace("##TRIAGEM_CONCLUIDA##", "").strip()
 
         enviar_whatsapp(numero, resposta)
         print(f"📤 Resposta enviada: {resposta[:80]}...")

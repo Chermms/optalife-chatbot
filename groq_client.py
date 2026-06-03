@@ -7,15 +7,11 @@
 """
 
 import os
+import json
 from groq import Groq
 
-# Inicializa o cliente Groq com a chave de API
 client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
-# ─────────────────────────────────────────────────────────────────
-# SYSTEM PROMPT — É aqui que você "treina" o chatbot com o script
-# da OptaLife. Altere este texto para ajustar o comportamento.
-# ─────────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = """
 Você é um atendente virtual da OptaLife — Soluções em Cirurgias (www.optalife.com.br).
 Seu papel é atender pacientes pelo WhatsApp com linguagem formal, técnica, profissional e acolhedora.
@@ -56,6 +52,7 @@ Siga esta ordem ao atender um novo paciente:
 3. CONFIRMAÇÃO
    - Ao concluir a triagem, informe: "Sua triagem foi registrada com sucesso.
      Nossa equipe clínica entrará em contato em até 24 horas úteis."
+   - IMPORTANTE: ao confirmar a triagem, inclua no final da sua resposta o marcador: ##TRIAGEM_CONCLUIDA##
 
 ═══════════════════════════════════════════
 RESPOSTAS PARA DÚVIDAS FREQUENTES
@@ -85,7 +82,6 @@ Sim. Todas as informações são tratadas com sigilo total, em conformidade com 
 "Posso falar com uma pessoa / atendente humano?" →
 Claro! Diga ao paciente: "Sem problema! Vou chamar a nossa atendente Isabela agora. 💙
 Em breve ela entrará em contato com você diretamente."
-(O sistema notificará a Isabela automaticamente.)
 
 ═══════════════════════════════════════════
 ENCAMINHAMENTO PARA ATENDENTE HUMANA
@@ -94,7 +90,7 @@ Nossa atendente humana se chama Isabela (OptaLife).
 Quando o paciente solicitar falar com uma pessoa real, um atendente ou a Isabela:
 - Informe que vai chamá-la imediatamente.
 - Seja cordial e tranquilize o paciente de que ele será atendido em breve.
-- NÃO tente continuar a triagem após esse pedido — aguarde o contato da Isabela.
+- NÃO tente continuar a triagem após esse pedido.
 
 ═══════════════════════════════════════════
 ENCERRAMENTO
@@ -117,30 +113,38 @@ REGRAS IMPORTANTES
   e retornaremos em breve."
 """
 
+EXTRATOR_PROMPT = """
+Analise o histórico de conversa abaixo e extraia os dados de triagem do paciente.
+Retorne APENAS um JSON válido, sem texto adicional, sem markdown, sem explicações.
+
+Formato esperado:
+{
+  "nome": "...",
+  "telefone": "...",
+  "especialidade": "...",
+  "convenio": "...",
+  "descricao": "..."
+}
+
+Se algum campo não foi informado, use "Não informado".
+"""
+
 
 def obter_resposta_ia(historico: list) -> str:
     """
     Envia o histórico da conversa para o Groq e retorna a resposta da IA.
-
-    Parâmetros:
-        historico: lista de mensagens no formato [{"role": "user"/"assistant", "content": "..."}]
-
-    Retorna:
-        String com a resposta gerada pela IA.
     """
     try:
         completion = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",   # Modelo gratuito e potente do Groq
+            model="llama-3.3-70b-versatile",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                *historico                      # Histórico completo da conversa
+                *historico
             ],
-            temperature=0.5,    # 0 = mais preciso/formal | 1 = mais criativo
-            max_tokens=500,     # Limita o tamanho da resposta
+            temperature=0.5,
+            max_tokens=500,
         )
-
-        resposta = completion.choices[0].message.content
-        return resposta
+        return completion.choices[0].message.content
 
     except Exception as e:
         print(f"⚠️ Erro na chamada ao Groq: {e}")
@@ -149,3 +153,43 @@ def obter_resposta_ia(historico: list) -> str:
             "Por favor, tente novamente em alguns instantes ou entre em contato pelo "
             "e-mail contato@optalife.com.br. Pedimos desculpas pelo inconveniente."
         )
+
+
+def triagem_foi_concluida(resposta: str) -> bool:
+    """Verifica se a resposta da IA contém o marcador de triagem concluída."""
+    return "##TRIAGEM_CONCLUIDA##" in resposta
+
+
+def extrair_dados_triagem(historico: list) -> dict:
+    """
+    Usa a IA para extrair os dados estruturados da triagem a partir do histórico.
+    """
+    try:
+        historico_texto = "\n".join(
+            f"{'Paciente' if m['role'] == 'user' else 'Sofia'}: {m['content']}"
+            for m in historico
+        )
+
+        completion = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": EXTRATOR_PROMPT},
+                {"role": "user", "content": historico_texto}
+            ],
+            temperature=0.0,
+            max_tokens=300,
+        )
+
+        texto = completion.choices[0].message.content.strip()
+        texto = texto.replace("```json", "").replace("```", "").strip()
+        return json.loads(texto)
+
+    except Exception as e:
+        print(f"⚠️ Erro ao extrair dados da triagem: {e}")
+        return {
+            "nome": "Não identificado",
+            "telefone": "Não informado",
+            "especialidade": "Não informado",
+            "convenio": "Não informado",
+            "descricao": "Não foi possível extrair automaticamente."
+        }
