@@ -1,83 +1,126 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
 ║          MEMÓRIA DAS CONVERSAS — memoria.py                  ║
-║  Guarda o histórico de cada paciente para que o chatbot      ║
-║  lembre o contexto da conversa (nome, caso clínico, etc.)    ║
+║  Persiste o histórico em SQLite para sobreviver a            ║
+║  reinicializações do servidor (Render worker timeout etc.)   ║
 ╚══════════════════════════════════════════════════════════════╝
 """
 
+import sqlite3
+import json
+import os
 from datetime import datetime, timedelta
 
-# Dicionário em memória: { "numero_telefone": [ lista de mensagens ] }
-# Nota: ao reiniciar o servidor, o histórico é perdido.
-# Para persistência real, use um banco de dados (ex: Redis, SQLite).
-_conversas: dict = {}
+# ── Arquivo do banco de dados ──
+DB_PATH = os.environ.get("DB_PATH", "/tmp/optalife_conversas.db")
 
 # Tempo máximo de inatividade antes de limpar o histórico (em horas)
 HORAS_INATIVIDADE = 24
 
-# Máximo de mensagens mantidas por conversa (evita contexto muito longo)
+# Máximo de mensagens mantidas por conversa
 MAX_MENSAGENS = 20
 
 
+# ─────────────────────────────────────────────
+# INICIALIZA O BANCO NA PRIMEIRA EXECUÇÃO
+# ─────────────────────────────────────────────
+def _inicializar_banco():
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS conversas (
+                numero           TEXT PRIMARY KEY,
+                mensagens        TEXT NOT NULL DEFAULT '[]',
+                ultima_atividade TEXT NOT NULL
+            )
+        """)
+        conn.commit()
+
+_inicializar_banco()
+
+
+# ─────────────────────────────────────────────
+# SALVAR MENSAGEM
+# ─────────────────────────────────────────────
 def salvar_mensagem(numero: str, role: str, conteudo: str):
     """
-    Salva uma mensagem no histórico da conversa do paciente.
-
-    Parâmetros:
-        numero  : número de telefone (identificador único do paciente)
-        role    : "user" (paciente) ou "assistant" (chatbot)
-        conteudo: texto da mensagem
+    Salva uma mensagem no histórico persistido em SQLite.
     """
-    if numero not in _conversas:
-        _conversas[numero] = {
-            "mensagens": [],
-            "ultima_atividade": datetime.now()
-        }
+    mensagens = obter_historico(numero)
 
-    _conversas[numero]["mensagens"].append({
-        "role": role,
-        "content": conteudo
-    })
-    _conversas[numero]["ultima_atividade"] = datetime.now()
+    mensagens.append({"role": role, "content": conteudo})
 
-    # Mantém apenas as últimas MAX_MENSAGENS para não sobrecarregar a IA
-    if len(_conversas[numero]["mensagens"]) > MAX_MENSAGENS:
-        _conversas[numero]["mensagens"] = _conversas[numero]["mensagens"][-MAX_MENSAGENS:]
+    # Mantém apenas as últimas MAX_MENSAGENS
+    if len(mensagens) > MAX_MENSAGENS:
+        mensagens = mensagens[-MAX_MENSAGENS:]
 
-    print(f"💾 Histórico de {numero}: {len(_conversas[numero]['mensagens'])} mensagens")
+    agora = datetime.now().isoformat()
+
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("""
+            INSERT INTO conversas (numero, mensagens, ultima_atividade)
+            VALUES (?, ?, ?)
+            ON CONFLICT(numero) DO UPDATE SET
+                mensagens        = excluded.mensagens,
+                ultima_atividade = excluded.ultima_atividade
+        """, (numero, json.dumps(mensagens, ensure_ascii=False), agora))
+        conn.commit()
+
+    print(f"💾 Histórico de {numero}: {len(mensagens)} mensagens")
 
 
+# ─────────────────────────────────────────────
+# OBTER HISTÓRICO
+# ─────────────────────────────────────────────
 def obter_historico(numero: str) -> list:
     """
-    Retorna o histórico de mensagens de um paciente.
-    Se a conversa estiver inativa há muito tempo, limpa e começa do zero.
-
-    Retorna:
-        Lista de mensagens no formato [{"role": "...", "content": "..."}]
+    Retorna o histórico de mensagens do paciente.
+    Limpa automaticamente se inativo há mais de HORAS_INATIVIDADE.
     """
-    if numero not in _conversas:
+    with sqlite3.connect(DB_PATH) as conn:
+        row = conn.execute(
+            "SELECT mensagens, ultima_atividade FROM conversas WHERE numero = ?",
+            (numero,)
+        ).fetchone()
+
+    if not row:
         return []
+
+    mensagens_json, ultima_str = row
 
     # Verifica inatividade
-    ultima = _conversas[numero]["ultima_atividade"]
-    if datetime.now() - ultima > timedelta(hours=HORAS_INATIVIDADE):
-        print(f"🔄 Histórico de {numero} expirado. Iniciando nova conversa.")
-        limpar_historico(numero)
+    try:
+        ultima = datetime.fromisoformat(ultima_str)
+        if datetime.now() - ultima > timedelta(hours=HORAS_INATIVIDADE):
+            print(f"🔄 Histórico de {numero} expirado. Iniciando nova conversa.")
+            limpar_historico(numero)
+            return []
+    except Exception:
+        pass
+
+    try:
+        return json.loads(mensagens_json)
+    except Exception:
         return []
 
-    return _conversas[numero]["mensagens"]
 
-
+# ─────────────────────────────────────────────
+# LIMPAR HISTÓRICO
+# ─────────────────────────────────────────────
 def limpar_historico(numero: str):
     """
-    Remove o histórico de um paciente (usado após inatividade ou encerramento).
+    Remove o histórico de um paciente.
     """
-    if numero in _conversas:
-        del _conversas[numero]
-        print(f"🗑️ Histórico de {numero} removido.")
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("DELETE FROM conversas WHERE numero = ?", (numero,))
+        conn.commit()
+    print(f"🗑️ Histórico de {numero} removido.")
 
 
+# ─────────────────────────────────────────────
+# TOTAL DE CONVERSAS ATIVAS
+# ─────────────────────────────────────────────
 def total_conversas_ativas() -> int:
     """Retorna quantas conversas estão ativas no momento."""
-    return len(_conversas)
+    with sqlite3.connect(DB_PATH) as conn:
+        row = conn.execute("SELECT COUNT(*) FROM conversas").fetchone()
+    return row[0] if row else 0
