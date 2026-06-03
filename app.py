@@ -7,6 +7,7 @@
 
 import os
 import requests
+import threading
 from flask import Flask, request, jsonify
 from groq_client import obter_resposta_ia, triagem_foi_concluida, extrair_dados_triagem
 from memoria import salvar_mensagem, obter_historico
@@ -76,6 +77,21 @@ def notificar_atendente(numero_cliente: str, texto_cliente: str):
 
 
 # ─────────────────────────────────────────────
+# DISPARA E-MAIL EM THREAD SEPARADA
+# (evita timeout do Gunicorn)
+# ─────────────────────────────────────────────
+def disparar_email_async(historico: list, numero: str):
+    """Extrai dados da triagem e envia e-mail em background."""
+    try:
+        print(f"📧 [thread] Extraindo dados da triagem de {numero}...")
+        dados_triagem = extrair_dados_triagem(historico)
+        dados_triagem["numero"] = numero
+        enviar_triagem_por_email(dados_triagem)
+    except Exception as e:
+        print(f"⚠️ [thread] Erro ao enviar e-mail: {e}")
+
+
+# ─────────────────────────────────────────────
 # RECEBE MENSAGENS DO WHATSAPP
 # ─────────────────────────────────────────────
 @app.route("/webhook", methods=["POST"])
@@ -123,12 +139,17 @@ def receber_mensagem():
         resposta  = obter_resposta_ia(historico)
         salvar_mensagem(numero, "assistant", resposta)
 
-        # ── Verifica se a triagem foi concluída e dispara e-mail ──
+        # ── Verifica se a triagem foi concluída ──
         if triagem_foi_concluida(resposta):
-            print(f"📋 Triagem concluída para {numero}. Extraindo dados e enviando e-mail...")
-            dados_triagem = extrair_dados_triagem(historico)
-            dados_triagem["numero"] = numero  # adiciona o número do WhatsApp
-            enviar_triagem_por_email(dados_triagem)
+            print(f"📋 Triagem concluída para {numero}. Disparando e-mail em background...")
+
+            # ✅ Roda em thread separada — não trava o webhook
+            t = threading.Thread(
+                target=disparar_email_async,
+                args=(historico, numero),
+                daemon=True
+            )
+            t.start()
 
             # Remove o marcador antes de enviar a resposta ao paciente
             resposta = resposta.replace("##TRIAGEM_CONCLUIDA##", "").strip()
