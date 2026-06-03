@@ -16,6 +16,7 @@ app = Flask(__name__)
 WHATSAPP_TOKEN  = os.environ.get("WHATSAPP_TOKEN")
 VERIFY_TOKEN    = os.environ.get("VERIFY_TOKEN")
 PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID")
+ATENDENTE_NUMERO = os.environ.get("ATENDENTE_NUMERO", "5521994404545")  # Isabela OptaLife
 
 
 # ─────────────────────────────────────────────
@@ -41,6 +42,36 @@ def verificar_webhook():
     else:
         print("❌ Token de verificação inválido.")
         return "Token inválido", 403
+
+
+# ─────────────────────────────────────────────
+# DETECTA SE CLIENTE QUER ATENDENTE HUMANO
+# ─────────────────────────────────────────────
+def cliente_quer_atendente(texto: str) -> bool:
+    palavras_chave = [
+        "atendente", "humano", "pessoa real", "falar com alguém",
+        "falar com uma pessoa", "quero falar com alguém",
+        "atendimento humano", "falar com atendente",
+        "falar com um humano", "quero falar com isabela",
+        "falar com a isabela", "preciso de ajuda humana",
+        "me passa para um atendente", "me transfere"
+    ]
+    texto_lower = texto.lower()
+    return any(palavra in texto_lower for palavra in palavras_chave)
+
+
+# ─────────────────────────────────────────────
+# NOTIFICA A ATENDENTE ISABELA NO WHATSAPP
+# ─────────────────────────────────────────────
+def notificar_atendente(numero_cliente: str, texto_cliente: str):
+    mensagem = (
+        f"🔔 *Novo paciente aguardando atendimento humano!*\n\n"
+        f"📱 *Número:* {numero_cliente}\n"
+        f"💬 *Última mensagem:* {texto_cliente}\n\n"
+        f"Por favor, Isabela, entre em contato com o paciente. 💙"
+    )
+    enviar_whatsapp(ATENDENTE_NUMERO, mensagem)
+    print(f"📣 Isabela notificada sobre o paciente {numero_cliente}")
 
 
 # ─────────────────────────────────────────────
@@ -76,6 +107,17 @@ def receber_mensagem():
         texto_recebido = mensagem_obj["text"]["body"]
         print(f"💬 Conteúdo: {texto_recebido}")
 
+        # ── Verifica se o paciente quer falar com atendente humano ──
+        if cliente_quer_atendente(texto_recebido):
+            notificar_atendente(numero, texto_recebido)
+            enviar_whatsapp(numero,
+                "Claro! Vou chamar a nossa atendente Isabela agora. 💙\n\n"
+                "Em breve ela entrará em contato com você diretamente. "
+                "Caso seja urgente, você também pode ligar para (21) 96643-9937. ✅"
+            )
+            return jsonify({"status": "encaminhado para Isabela"}), 200
+
+        # ── Fluxo normal com IA ──
         salvar_mensagem(numero, "user", texto_recebido)
         historico = obter_historico(numero)
         resposta  = obter_resposta_ia(historico)
