@@ -2,49 +2,40 @@
 ╔══════════════════════════════════════════════════════════════╗
 ║          EMAIL SENDER — email_sender.py                      ║
 ║  Envia a triagem do paciente para contato@optalife.com.br    ║
+║  Usa Resend API (HTTP) — compatível com Render               ║
 ╚══════════════════════════════════════════════════════════════╝
 """
 
 import os
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import requests
 from datetime import datetime
 
-# ── Configurações de e-mail (via variáveis de ambiente) ──
-EMAIL_REMETENTE = os.environ.get("EMAIL_REMETENTE")       # ex: bot@optalife.com.br
-EMAIL_SENHA     = os.environ.get("EMAIL_SENHA")           # senha do e-mail ou App Password
+RESEND_API_KEY     = os.environ.get("RESEND_API_KEY")
+EMAIL_REMETENTE    = os.environ.get("EMAIL_REMETENTE", "sofia@optalife.com.br")
 EMAIL_DESTINATARIO = "contato@optalife.com.br"
-SMTP_HOST       = os.environ.get("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT       = int(os.environ.get("SMTP_PORT", 587))
 
 
 def enviar_triagem_por_email(triagem: dict):
     """
-    Envia um e-mail formatado com os dados da triagem do paciente.
-
-    Parâmetros:
-        triagem: dicionário com os dados coletados, ex:
-        {
-            "numero": "5521999999999",
-            "nome": "João Silva",
-            "telefone": "(21) 99999-9999",
-            "especialidade": "Cirurgia da Coluna",
-            "convenio": "Unimed",
-            "descricao": "Dor lombar há 6 meses...",
-            "historico_resumido": "..."   # opcional
-        }
+    Envia um e-mail HTML formatado com os dados da triagem via Resend API.
     """
-    try:
-        agora = datetime.now().strftime("%d/%m/%Y às %H:%M")
+    # ── Diagnóstico de configuração ──
+    print(f"📧 RESEND_API_KEY configurada: {'✅ Sim' if RESEND_API_KEY else '❌ NÃO — variável ausente!'}")
+    print(f"📧 EMAIL_REMETENTE: {EMAIL_REMETENTE}")
+    print(f"📧 Destinatário: {EMAIL_DESTINATARIO}")
 
-        nome         = triagem.get("nome", "Não informado")
-        telefone     = triagem.get("telefone", triagem.get("numero", "Não informado"))
+    if not RESEND_API_KEY:
+        print("⚠️ E-mail NÃO enviado: RESEND_API_KEY não configurada no Render.")
+        return False
+
+    try:
+        agora         = datetime.now().strftime("%d/%m/%Y às %H:%M")
+        nome          = triagem.get("nome", "Não informado")
+        telefone      = triagem.get("telefone", triagem.get("numero", "Não informado"))
         especialidade = triagem.get("especialidade", "Não informado")
-        convenio     = triagem.get("convenio", "Não informado")
-        descricao    = triagem.get("descricao", "Não informado")
-        numero_wa    = triagem.get("numero", "Não informado")
-        historico    = triagem.get("historico_resumido", "")
+        convenio      = triagem.get("convenio", "Não informado")
+        descricao     = triagem.get("descricao", "Não informado")
+        numero_wa     = triagem.get("numero", "Não informado")
 
         assunto = f"🩺 Nova Triagem OptaLife — {nome} ({agora})"
 
@@ -58,7 +49,6 @@ def enviar_triagem_por_email(triagem: dict):
           </div>
 
           <div style="background-color: #f4f8fb; padding: 24px; border: 1px solid #d0e4f0;">
-
             <h3 style="color: #0a5c8a; border-bottom: 1px solid #cce; padding-bottom: 6px;">
               Dados do Paciente
             </h3>
@@ -92,9 +82,6 @@ def enviar_triagem_por_email(triagem: dict):
                       border-radius: 4px; line-height: 1.6;">
               {descricao}
             </p>
-
-            {"<h3 style='color:#0a5c8a;border-bottom:1px solid #cce;padding-bottom:6px;margin-top:24px;'>Histórico da Conversa</h3><pre style='background:white;padding:12px;border-radius:4px;font-size:13px;white-space:pre-wrap;'>" + historico + "</pre>" if historico else ""}
-
           </div>
 
           <div style="background-color: #0a5c8a; padding: 14px; border-radius: 0 0 8px 8px; text-align: center;">
@@ -108,20 +95,32 @@ def enviar_triagem_por_email(triagem: dict):
         </html>
         """
 
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = assunto
-        msg["From"]    = EMAIL_REMETENTE
-        msg["To"]      = EMAIL_DESTINATARIO
-        msg.attach(MIMEText(corpo_html, "html"))
+        print(f"📧 Enviando e-mail para {EMAIL_DESTINATARIO}...")
 
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as servidor:
-            servidor.starttls()
-            servidor.login(EMAIL_REMETENTE, EMAIL_SENHA)
-            servidor.sendmail(EMAIL_REMETENTE, EMAIL_DESTINATARIO, msg.as_string())
+        response = requests.post(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": f"Bearer {RESEND_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "from": f"Sofia OptaLife <{EMAIL_REMETENTE}>",
+                "to": [EMAIL_DESTINATARIO],
+                "subject": assunto,
+                "html": corpo_html
+            },
+            timeout=15
+        )
 
-        print(f"✅ E-mail de triagem enviado para {EMAIL_DESTINATARIO} — Paciente: {nome}")
-        return True
+        print(f"📧 Resposta Resend: status={response.status_code} | body={response.text}")
+
+        if response.status_code in (200, 201):
+            print(f"✅ E-mail enviado com sucesso — Paciente: {nome}")
+            return True
+        else:
+            print(f"⚠️ Resend recusou o envio: {response.status_code} — {response.text}")
+            return False
 
     except Exception as e:
-        print(f"⚠️ Erro ao enviar e-mail de triagem: {e}")
+        print(f"⚠️ Exceção ao enviar e-mail: {type(e).__name__}: {e}")
         return False
