@@ -1,0 +1,18 @@
+# Arquivo de configuração para deploy no Render.com (gratuito)
+# Este arquivo diz ao Render como iniciar o chatbot
+
+services:
+  - type: web
+    name: optalife-chatbot
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false
+      - key: WHATSAPP_TOKEN
+        sync: false
+      - key: PHONE_NUMBER_ID
+        sync: false
+      - key: VERIFY_TOKEN
+        sync: false
