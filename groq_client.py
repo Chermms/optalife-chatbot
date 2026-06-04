@@ -200,6 +200,8 @@ def extrair_dados_triagem(historico: list) -> dict:
             f"{'Paciente' if m['role'] == 'user' else 'Sofia'}: {m['content']}"
             for m in historico
         )
+        print(f"📋 [extrator] Histórico com {len(historico)} mensagens")
+        print(f"📋 [extrator] Conteúdo:\n{historico_texto[:500]}")
 
         prompt = f"{EXTRATOR_PROMPT}\n\nHistórico:\n{historico_texto}"
 
