@@ -1,6 +1,4 @@
-flask==3.0.3
-requests==2.32.3
-groq==1.4.0
-httpx==0.28.1
-python-dotenv==1.0.1
-gunicorn==22.0.0
+flask
+gunicorn
+requests
+google-generativeai

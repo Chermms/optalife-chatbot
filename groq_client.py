@@ -1,16 +1,19 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║          GROQ AI — groq_client.py                            ║
+║          GEMINI AI — groq_client.py                          ║
 ║  Aqui fica o "cérebro" do chatbot e todo o script            ║
 ║  de atendimento da OptaLife como instrução para a IA.        ║
+║  Usando Google Gemini 2.0 Flash (gratuito, 1M tokens/dia)    ║
 ╚══════════════════════════════════════════════════════════════╝
 """
 
 import os
 import json
-from groq import Groq
+import google.generativeai as genai
 
-client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+# Inicializa o cliente Gemini
+genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+model = genai.GenerativeModel("gemini-2.0-flash")
 
 SYSTEM_PROMPT = """
 Você é um atendente virtual da OptaLife — Soluções em Cirurgias (www.optalife.com.br).
@@ -49,10 +52,27 @@ Siga esta ordem ao atender um novo paciente:
    - Possui plano de saúde? Qual operadora?
    - Breve descrição do caso clínico (sintomas, tempo, exames realizados)
 
-3. CONFIRMAÇÃO
-   - Ao concluir a triagem, informe: "Sua triagem foi registrada com sucesso.
-     Nossa equipe clínica entrará em contato em até 24 horas úteis."
-   - IMPORTANTE: ao confirmar a triagem, inclua no final da sua resposta o marcador: ##TRIAGEM_CONCLUIDA##
+3. RESUMO PARA CONFIRMAÇÃO
+   Após coletar TODOS os dados acima, apresente um resumo para o paciente confirmar,
+   neste formato exato:
+
+   "Perfeito! Antes de registrar sua triagem, confirme seus dados:
+
+   👤 *Nome:* [nome]
+   📱 *Telefone:* [telefone]
+   🩺 *Especialidade:* [especialidade]
+   💳 *Convênio:* [convênio]
+   📋 *Caso clínico:* [resumo do caso]
+
+   Está tudo correto? (responda *Sim* para confirmar ou corrija o que precisar)"
+
+4. CONFIRMAÇÃO FINAL
+   - Se o paciente responder "sim", "correto", "confirmo" ou similar:
+     Responda: "Sua triagem foi registrada com sucesso! ✅
+     Nossa equipe clínica entrará em contato em até 24 horas úteis. 💙"
+     E inclua ao final (invisível para o paciente): ##TRIAGEM_CONCLUIDA##
+
+   - Se o paciente quiser corrigir algo: faça a correção e apresente o resumo novamente.
 
 ═══════════════════════════════════════════
 RESPOSTAS PARA DÚVIDAS FREQUENTES
@@ -106,11 +126,13 @@ REGRAS IMPORTANTES
 - NUNCA informe valores de procedimentos. Diga que a equipe entrará em contato com cotação.
 - Em caso de EMERGÊNCIA (dor aguda intensa, perda de movimentos, desmaio): oriente o paciente
   a procurar imediatamente uma UPA ou Pronto-Socorro. A OptaLife atende casos ELETIVOS.
-- Use emojis com moderação: apenas 💙 ✅ 🩺 são permitidos.
+- Use emojis com moderação: apenas 💙 ✅ 🩺 💳 👤 📱 📋 são permitidos.
 - Responda sempre em português brasileiro formal.
 - Seja objetivo(a). Evite respostas muito longas (máximo 3 parágrafos por mensagem).
 - Se não souber responder algo, diga: "Vou verificar essa informação com nossa equipe
   e retornaremos em breve."
+- O marcador ##TRIAGEM_CONCLUIDA## deve aparecer SOMENTE após o paciente confirmar o resumo.
+  NUNCA inclua esse marcador antes da confirmação do paciente.
 """
 
 EXTRATOR_PROMPT = """
@@ -130,24 +152,50 @@ Se algum campo não foi informado, use "Não informado".
 """
 
 
+def _historico_para_gemini(historico: list) -> list:
+    """
+    Converte o histórico no formato OpenAI para o formato Gemini.
+    """
+    gemini_history = []
+    for msg in historico:
+        role = "user" if msg["role"] == "user" else "model"
+        gemini_history.append({
+            "role": role,
+            "parts": [{"text": msg["content"]}]
+        })
+    return gemini_history
+
+
 def obter_resposta_ia(historico: list) -> str:
     """
-    Envia o histórico da conversa para o Groq e retorna a resposta da IA.
+    Envia o histórico da conversa para o Gemini e retorna a resposta da IA.
     """
     try:
-        completion = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                *historico
-            ],
-            temperature=0.5,
-            max_tokens=500,
+        # Separa o último turno do usuário do histórico anterior
+        if not historico:
+            return "Olá! Como posso ajudá-lo(a)?"
+
+        historico_anterior = historico[:-1]
+        ultima_mensagem    = historico[-1]["content"]
+
+        gemini_history = _historico_para_gemini(historico_anterior)
+
+        chat = model.start_chat(
+            history=gemini_history,
+            # Injeta o system prompt como primeira instrução
         )
-        return completion.choices[0].message.content
+
+        # Monta a mensagem com system prompt na primeira vez
+        if not gemini_history:
+            prompt_completo = f"{SYSTEM_PROMPT}\n\n---\n\nPaciente: {ultima_mensagem}"
+        else:
+            prompt_completo = ultima_mensagem
+
+        resposta = chat.send_message(prompt_completo)
+        return resposta.text
 
     except Exception as e:
-        print(f"⚠️ Erro na chamada ao Groq: {e}")
+        print(f"⚠️ Erro na chamada ao Gemini: {e}")
         return (
             "Olá! No momento estamos com instabilidade técnica. "
             "Por favor, tente novamente em alguns instantes ou entre em contato pelo "
@@ -162,7 +210,7 @@ def triagem_foi_concluida(resposta: str) -> bool:
 
 def extrair_dados_triagem(historico: list) -> dict:
     """
-    Usa a IA para extrair os dados estruturados da triagem a partir do histórico.
+    Usa o Gemini para extrair os dados estruturados da triagem a partir do histórico.
     """
     try:
         historico_texto = "\n".join(
@@ -170,17 +218,10 @@ def extrair_dados_triagem(historico: list) -> dict:
             for m in historico
         )
 
-        completion = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "system", "content": EXTRATOR_PROMPT},
-                {"role": "user", "content": historico_texto}
-            ],
-            temperature=0.0,
-            max_tokens=300,
-        )
+        prompt = f"{EXTRATOR_PROMPT}\n\nHistórico:\n{historico_texto}"
+        resposta = model.generate_content(prompt)
 
-        texto = completion.choices[0].message.content.strip()
+        texto = resposta.text.strip()
         texto = texto.replace("```json", "").replace("```", "").strip()
         return json.loads(texto)
 
