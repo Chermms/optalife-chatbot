@@ -11,7 +11,7 @@ from google import genai
 from google.genai import types
 
 client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-MODEL  = "gemini-1.5-flash"
+MODEL  = "gemini-2.0-flash-lite"
 
 SYSTEM_PROMPT = """
 Você é um atendente virtual da OptaLife — Soluções em Cirurgias (www.optalife.com.br).
