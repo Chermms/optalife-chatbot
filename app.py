@@ -143,10 +143,13 @@ def receber_mensagem():
         if triagem_foi_concluida(resposta):
             print(f"📋 Triagem concluída para {numero}. Disparando e-mail em background...")
 
+            # Busca histórico completo incluindo a resposta final da Sofia
+            historico_completo = obter_historico(numero)
+
             # ✅ Roda em thread separada — não trava o webhook
             t = threading.Thread(
                 target=disparar_email_async,
-                args=(historico, numero),
+                args=(historico_completo, numero),
                 daemon=True
             )
             t.start()
