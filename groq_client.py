@@ -1,19 +1,17 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
 ║          GEMINI AI — groq_client.py                          ║
-║  Aqui fica o "cérebro" do chatbot e todo o script            ║
-║  de atendimento da OptaLife como instrução para a IA.        ║
-║  Usando Google Gemini 2.0 Flash (gratuito, 1M tokens/dia)    ║
+║  Usando google-genai (nova SDK) + gemini-1.5-flash           ║
 ╚══════════════════════════════════════════════════════════════╝
 """
 
 import os
 import json
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
-# Inicializa o cliente Gemini
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-model = genai.GenerativeModel("gemini-2.0-flash")
+client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+MODEL  = "gemini-1.5-flash"
 
 SYSTEM_PROMPT = """
 Você é um atendente virtual da OptaLife — Soluções em Cirurgias (www.optalife.com.br).
@@ -152,46 +150,33 @@ Se algum campo não foi informado, use "Não informado".
 """
 
 
-def _historico_para_gemini(historico: list) -> list:
-    """
-    Converte o histórico no formato OpenAI para o formato Gemini.
-    """
-    gemini_history = []
+def _montar_historico(historico: list) -> list:
+    """Converte histórico para o formato da nova SDK google-genai."""
+    mensagens = []
     for msg in historico:
         role = "user" if msg["role"] == "user" else "model"
-        gemini_history.append({
-            "role": role,
-            "parts": [{"text": msg["content"]}]
-        })
-    return gemini_history
+        mensagens.append(
+            types.Content(role=role, parts=[types.Part(text=msg["content"])])
+        )
+    return mensagens
 
 
 def obter_resposta_ia(historico: list) -> str:
-    """
-    Envia o histórico da conversa para o Gemini e retorna a resposta da IA.
-    """
+    """Envia o histórico para o Gemini e retorna a resposta."""
     try:
-        # Separa o último turno do usuário do histórico anterior
-        if not historico:
-            return "Olá! Como posso ajudá-lo(a)?"
-
-        historico_anterior = historico[:-1]
-        ultima_mensagem    = historico[-1]["content"]
-
-        gemini_history = _historico_para_gemini(historico_anterior)
-
-        chat = model.start_chat(
-            history=gemini_history,
-            # Injeta o system prompt como primeira instrução
+        config = types.GenerateContentConfig(
+            system_instruction=SYSTEM_PROMPT,
+            max_output_tokens=500,
+            temperature=0.5,
         )
 
-        # Monta a mensagem com system prompt na primeira vez
-        if not gemini_history:
-            prompt_completo = f"{SYSTEM_PROMPT}\n\n---\n\nPaciente: {ultima_mensagem}"
-        else:
-            prompt_completo = ultima_mensagem
+        mensagens = _montar_historico(historico)
 
-        resposta = chat.send_message(prompt_completo)
+        resposta = client.models.generate_content(
+            model=MODEL,
+            contents=mensagens,
+            config=config,
+        )
         return resposta.text
 
     except Exception as e:
@@ -204,14 +189,12 @@ def obter_resposta_ia(historico: list) -> str:
 
 
 def triagem_foi_concluida(resposta: str) -> bool:
-    """Verifica se a resposta da IA contém o marcador de triagem concluída."""
+    """Verifica se a resposta contém o marcador de triagem concluída."""
     return "##TRIAGEM_CONCLUIDA##" in resposta
 
 
 def extrair_dados_triagem(historico: list) -> dict:
-    """
-    Usa o Gemini para extrair os dados estruturados da triagem a partir do histórico.
-    """
+    """Extrai dados estruturados da triagem a partir do histórico."""
     try:
         historico_texto = "\n".join(
             f"{'Paciente' if m['role'] == 'user' else 'Sofia'}: {m['content']}"
@@ -219,7 +202,12 @@ def extrair_dados_triagem(historico: list) -> dict:
         )
 
         prompt = f"{EXTRATOR_PROMPT}\n\nHistórico:\n{historico_texto}"
-        resposta = model.generate_content(prompt)
+
+        resposta = client.models.generate_content(
+            model=MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=300),
+        )
 
         texto = resposta.text.strip()
         texto = texto.replace("```json", "").replace("```", "").strip()
