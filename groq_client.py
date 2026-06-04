@@ -201,7 +201,6 @@ def extrair_dados_triagem(historico: list) -> dict:
             for m in historico
         )
         print(f"📋 [extrator] Histórico com {len(historico)} mensagens")
-        print(f"📋 [extrator] Conteúdo:\n{historico_texto[:500]}")
 
         prompt = f"{EXTRATOR_PROMPT}\n\nHistórico:\n{historico_texto}"
 
@@ -212,7 +211,13 @@ def extrair_dados_triagem(historico: list) -> dict:
         )
 
         texto = resposta.text.strip()
+        # Remove blocos markdown se existirem
         texto = texto.replace("```json", "").replace("```", "").strip()
+        # Extrai apenas o conteúdo entre { } caso haja texto extra
+        inicio = texto.find("{")
+        fim    = texto.rfind("}") + 1
+        if inicio >= 0 and fim > inicio:
+            texto = texto[inicio:fim]
         return json.loads(texto)
 
     except Exception as e:
