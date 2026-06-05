@@ -158,8 +158,10 @@ def receber_mensagem():
             notificar_atendente(numero, texto_recebido, triagem)
             enviar_whatsapp(numero,
                 "Claro! Vou chamar um(a) de nossos atendentes agora. 💙\n\n"
-                "Em breve ele(a) entrará em contato com você diretamente. "
-                "Caso seja urgente, você também pode ligar para (21) 96643-9937. ✅"
+                "Em breve ele(a) entrará em contato com você diretamente.\n\n"
+                "Caso prefira, você pode iniciar a conversa diretamente:\n"
+                "🔗 https://wa.me/5521994404545\n\n"
+                "Ou ligue: (21) 99440-4545. ✅"
             )
             return jsonify({"status": "encaminhado para atendente"}), 200
 
