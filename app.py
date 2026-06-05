@@ -162,7 +162,8 @@ def receber_mensagem():
                 "Caso prefira, você pode iniciar a conversa diretamente:\n"
                 "🔗 https://wa.me/5521994404545\n\n"
                 "Ou ligue para um dos nossos números de atendimento:\n"
-                "(21) 96643-9937. ✅ ou (21) 99440-4545. ✅"
+                "(21) 96643-9937. ✅"
+                "(21) 99440-4545. ✅"            
             )
             return jsonify({"status": "encaminhado para atendente"}), 200
 
