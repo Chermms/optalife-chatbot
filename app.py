@@ -20,7 +20,7 @@ CORS(app, origins=["https://optalife.com.br", "https://www.optalife.com.br"])
 WHATSAPP_TOKEN   = os.environ.get("WHATSAPP_TOKEN")
 VERIFY_TOKEN     = os.environ.get("VERIFY_TOKEN")
 PHONE_NUMBER_ID  = os.environ.get("PHONE_NUMBER_ID")
-ATENDENTE_NUMERO = os.environ.get("ATENDENTE_NUMERO", "5521994404545")  # Isabela OptaLife
+ATENDENTE_NUMERO = os.environ.get("ATENDENTE_NUMERO", "5521994404545")  # Atendente OptaLife
 
 
 # ─────────────────────────────────────────────
@@ -56,8 +56,8 @@ def cliente_quer_atendente(texto: str) -> bool:
         "atendente", "humano", "pessoa real", "falar com alguém",
         "falar com uma pessoa", "quero falar com alguém",
         "atendimento humano", "falar com atendente",
-        "falar com um humano", "quero falar com isabela",
-        "falar com a isabela", "preciso de ajuda humana",
+        "falar com um humano", 
+         "preciso de ajuda humana",
         "me passa para um atendente", "me transfere"
     ]
     texto_lower = texto.lower()
@@ -67,15 +67,34 @@ def cliente_quer_atendente(texto: str) -> bool:
 # ─────────────────────────────────────────────
 # NOTIFICA A ATENDENTE ISABELA NO WHATSAPP
 # ─────────────────────────────────────────────
-def notificar_atendente(numero_cliente: str, texto_cliente: str):
+def notificar_atendente(numero_cliente: str, texto_cliente: str, triagem: dict = None):
+    """Notifica o atendente com os dados do paciente e triagem se disponível."""
+    linhas_triagem = ""
+    if triagem:
+        nome         = triagem.get("nome", "Não informado")
+        telefone     = triagem.get("telefone", "Não informado")
+        especialidade = triagem.get("especialidade", "Não informado")
+        convenio     = triagem.get("convenio", "Não informado")
+        descricao    = triagem.get("descricao", "Não informado")
+        linhas_triagem = (
+            f"\n📋 *Triagem registrada:*\n"
+            f"👤 *Nome:* {nome}\n"
+            f"📞 *Telefone:* {telefone}\n"
+            f"🩺 *Especialidade:* {especialidade}\n"
+            f"💳 *Convênio:* {convenio}\n"
+            f"📝 *Caso clínico:* {descricao}\n"
+        )
+
     mensagem = (
-        f"🔔 *Novo paciente aguardando atendimento humano!*\n\n"
-        f"📱 *Número:* {numero_cliente}\n"
-        f"💬 *Última mensagem:* {texto_cliente}\n\n"
-        f"Por favor, Isabela, entre em contato com o paciente. 💙"
+        f"🔔 *Novo paciente aguardando atendimento!*\n\n"
+        f"📱 *Número:* +{numero_cliente}\n"
+        f"🔗 *Abrir conversa:* https://wa.me/{numero_cliente}\n"
+        f"💬 *Última mensagem:* {texto_cliente}"
+        f"{linhas_triagem}\n"
+        f"Por favor, entre em contato com o(a) paciente. 💙"
     )
     enviar_whatsapp(ATENDENTE_NUMERO, mensagem)
-    print(f"📣 Isabela notificada sobre o paciente {numero_cliente}")
+    print(f"📣 Atendente notificada — paciente: {numero_cliente} → {ATENDENTE_NUMERO}")
 
 
 # ─────────────────────────────────────────────
@@ -127,13 +146,22 @@ def receber_mensagem():
 
         # ── Verifica se o paciente quer falar com atendente humano ──
         if cliente_quer_atendente(texto_recebido):
-            notificar_atendente(numero, texto_recebido)
+            # Tenta extrair triagem do histórico se já foi feita
+            historico_atual = obter_historico(numero)
+            triagem = None
+            if historico_atual:
+                try:
+                    triagem = extrair_dados_triagem(historico_atual)
+                except Exception:
+                    triagem = None
+
+            notificar_atendente(numero, texto_recebido, triagem)
             enviar_whatsapp(numero,
-                "Claro! Vou chamar a nossa atendente Isabela agora. 💙\n\n"
-                "Em breve ela entrará em contato com você diretamente. "
+                "Claro! Vou chamar um(a) de nossos atendentes agora. 💙\n\n"
+                "Em breve ele(a) entrará em contato com você diretamente. "
                 "Caso seja urgente, você também pode ligar para (21) 96643-9937. ✅"
             )
-            return jsonify({"status": "encaminhado para Isabela"}), 200
+            return jsonify({"status": "encaminhado para atendente"}), 200
 
         # ── Fluxo normal com IA ──
         salvar_mensagem(numero, "user", texto_recebido)

@@ -16,7 +16,7 @@ MODEL  = "gemini-2.5-flash"
 SYSTEM_PROMPT = """
 Você é um atendente virtual da OptaLife — Soluções em Cirurgias (www.optalife.com.br).
 Seu papel é atender pacientes pelo WhatsApp com linguagem formal, técnica, profissional e acolhedora.
-Seu nome é Sofia, assistente virtual da OptaLife.
+Seu nome é Olívia, assistente virtual da OptaLife.
 
 ═══════════════════════════════════════════
 SOBRE A OPTALIFE
@@ -41,7 +41,7 @@ Siga esta ordem ao atender um novo paciente:
 
 1. SAUDAÇÃO
    - Cumprimente com: "Olá! Bem-vindo(a) à OptaLife — Soluções em Cirurgias.
-     Meu nome é Sofia, assistente virtual da OptaLife. Como posso auxiliá-lo(a) hoje?"
+     Meu nome é Olívia, assistente virtual da OptaLife. Como posso auxiliá-lo(a) hoje?"
 
 2. TRIAGEM (colete estas informações gradualmente, uma por vez):
    - Nome completo
@@ -98,14 +98,14 @@ Nossa equipe retorna em até 24 horas úteis após o registro da triagem.
 Sim. Todas as informações são tratadas com sigilo total, em conformidade com a LGPD.
 
 "Posso falar com uma pessoa / atendente humano?" →
-Claro! Diga ao paciente: "Sem problema! Vou chamar a nossa atendente Isabela agora. 💙
+Claro! Diga ao paciente: "Sem problema! Vou chamar um(a) de nossos atendentes agora. 💙
 Em breve ela entrará em contato com você diretamente."
 
 ═══════════════════════════════════════════
 ENCAMINHAMENTO PARA ATENDENTE HUMANA
 ═══════════════════════════════════════════
-Nossa atendente humana se chama Isabela (OptaLife).
-Quando o paciente solicitar falar com uma pessoa real, um atendente ou a Isabela:
+Nossa atendente humana se chamo(a) atendente (OptaLife).
+Quando o paciente solicitar falar com uma pessoa real, um atendente ou o(a) atendente:
 - Informe que vai chamá-la imediatamente.
 - Seja cordial e tranquilize o paciente de que ele será atendido em breve.
 - NÃO tente continuar a triagem após esse pedido.
@@ -195,7 +195,7 @@ def triagem_foi_concluida(resposta: str) -> bool:
 
 def extrair_dados_triagem(historico: list) -> dict:
     """
-    Extrai dados da triagem diretamente do resumo que a Sofia apresentou ao paciente.
+    Extrai dados da triagem diretamente do resumo que a Olívia apresentou ao paciente.
     Busca o bloco de confirmação no histórico, muito mais confiável que pedir JSON à IA.
     """
     import re
@@ -209,7 +209,7 @@ def extrair_dados_triagem(historico: list) -> dict:
         "descricao": "Não informado"
     }
 
-    # Busca a mensagem da Sofia que contém o resumo de confirmação
+    # Busca a mensagem da Olívia que contém o resumo de confirmação
     resumo_texto = ""
     for msg in reversed(historico):
         if msg["role"] == "assistant" and "👤" in msg["content"] and "📱" in msg["content"]:
@@ -244,7 +244,7 @@ def extrair_dados_triagem(historico: list) -> dict:
         print("📋 [extrator] Resumo não encontrado, usando fallback com IA...")
         try:
             historico_texto = "\n".join(
-                f"{'Paciente' if m['role'] == 'user' else 'Sofia'}: {m['content']}"
+                f"{'Paciente' if m['role'] == 'user' else 'Olívia'}: {m['content']}"
                 for m in historico
             )
             prompt = f"{EXTRATOR_PROMPT}\n\nHistórico:\n{historico_texto}"
