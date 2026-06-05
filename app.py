@@ -9,11 +9,13 @@ import os
 import requests
 import threading
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 from groq_client import obter_resposta_ia, triagem_foi_concluida, extrair_dados_triagem
 from memoria import salvar_mensagem, obter_historico
 from email_sender import enviar_triagem_por_email
 
 app = Flask(__name__)
+CORS(app, origins=["https://optalife.com.br", "https://www.optalife.com.br"])
 
 WHATSAPP_TOKEN   = os.environ.get("WHATSAPP_TOKEN")
 VERIFY_TOKEN     = os.environ.get("VERIFY_TOKEN")
