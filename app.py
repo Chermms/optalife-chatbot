@@ -168,6 +168,80 @@ def receber_mensagem():
 
 
 # ─────────────────────────────────────────────
+# RECEBE TRIAGEM DO SITE E ENVIA POR E-MAIL
+# ─────────────────────────────────────────────
+@app.route("/triagem", methods=["POST"])
+def receber_triagem_site():
+    """Recebe dados do formulário do site e envia e-mail para contato@optalife.com.br."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"status": "erro", "mensagem": "Dados inválidos"}), 400
+
+        from datetime import datetime
+        import requests as req
+
+        nome         = data.get("nome", "Não informado")
+        telefone     = data.get("telefone", "Não informado")
+        email        = data.get("email", "Não informado")
+        cirurgia     = data.get("cirurgia", "Não informado")
+        convenio     = data.get("convenio", "Não informado")
+        descricao    = data.get("descricao", "Não informado")
+        origem       = data.get("origem", "Site")
+        agora        = datetime.now().strftime("%d/%m/%Y às %H:%M")
+
+        corpo_html = f"""
+        <html><body style="font-family:Arial,sans-serif;color:#333;max-width:600px;margin:auto;">
+          <div style="background:#0a5c8a;padding:20px;border-radius:8px 8px 0 0;">
+            <h2 style="color:white;margin:0;">🩺 Nova Triagem — OptaLife</h2>
+            <p style="color:#cce6f7;margin:4px 0 0 0;">Via {origem} — {agora}</p>
+          </div>
+          <div style="background:#f4f8fb;padding:24px;border:1px solid #d0e4f0;">
+            <h3 style="color:#0a5c8a;border-bottom:1px solid #cce;padding-bottom:6px;">Dados do Paciente</h3>
+            <table style="width:100%;border-collapse:collapse;">
+              <tr><td style="padding:8px;font-weight:bold;width:40%;">Nome completo:</td><td style="padding:8px;">{nome}</td></tr>
+              <tr style="background:#e8f3fb;"><td style="padding:8px;font-weight:bold;">Telefone:</td><td style="padding:8px;">{telefone}</td></tr>
+              <tr><td style="padding:8px;font-weight:bold;">E-mail:</td><td style="padding:8px;">{email}</td></tr>
+              <tr style="background:#e8f3fb;"><td style="padding:8px;font-weight:bold;">Especialidade / Cirurgia:</td><td style="padding:8px;">{cirurgia}</td></tr>
+              <tr><td style="padding:8px;font-weight:bold;">Convênio:</td><td style="padding:8px;">{convenio}</td></tr>
+            </table>
+            <h3 style="color:#0a5c8a;border-bottom:1px solid #cce;padding-bottom:6px;margin-top:24px;">Descrição do Caso Clínico</h3>
+            <p style="background:white;padding:12px;border-left:4px solid #0a5c8a;border-radius:4px;line-height:1.6;">{descricao}</p>
+          </div>
+          <div style="background:#0a5c8a;padding:14px;border-radius:0 0 8px 8px;text-align:center;">
+            <p style="color:white;margin:0;font-size:13px;">OptaLife — Soluções em Cirurgias | <a href="https://www.optalife.com.br" style="color:#cce6f7;">www.optalife.com.br</a></p>
+          </div>
+        </body></html>
+        """
+
+        resend_key = os.environ.get("RESEND_API_KEY")
+        remetente  = os.environ.get("EMAIL_REMETENTE", "contato@optalife.com.br")
+
+        response = req.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
+            json={
+                "from": f"Site OptaLife <{remetente}>",
+                "to": ["contato@optalife.com.br"],
+                "subject": f"🩺 Nova Triagem pelo Site — {nome}",
+                "html": corpo_html
+            },
+            timeout=15
+        )
+
+        if response.status_code in (200, 201):
+            print(f"✅ Triagem do site enviada — {nome}")
+            return jsonify({"status": "ok"}), 200
+        else:
+            print(f"⚠️ Erro Resend: {response.text}")
+            return jsonify({"status": "erro"}), 500
+
+    except Exception as e:
+        print(f"⚠️ Erro na triagem do site: {e}")
+        return jsonify({"status": "erro", "detalhe": str(e)}), 500
+
+
+# ─────────────────────────────────────────────
 # ENVIA MENSAGEM PELO WHATSAPP
 # ─────────────────────────────────────────────
 def enviar_whatsapp(numero_destino: str, texto: str):
