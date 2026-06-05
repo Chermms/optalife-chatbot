@@ -194,38 +194,73 @@ def triagem_foi_concluida(resposta: str) -> bool:
 
 
 def extrair_dados_triagem(historico: list) -> dict:
-    """Extrai dados estruturados da triagem a partir do histórico."""
-    try:
-        historico_texto = "\n".join(
-            f"{'Paciente' if m['role'] == 'user' else 'Sofia'}: {m['content']}"
-            for m in historico
-        )
-        print(f"📋 [extrator] Histórico com {len(historico)} mensagens")
+    """
+    Extrai dados da triagem diretamente do resumo que a Sofia apresentou ao paciente.
+    Busca o bloco de confirmação no histórico, muito mais confiável que pedir JSON à IA.
+    """
+    import re
+    print(f"📋 [extrator] Histórico com {len(historico)} mensagens")
 
-        prompt = f"{EXTRATOR_PROMPT}\n\nHistórico:\n{historico_texto}"
+    dados = {
+        "nome": "Não informado",
+        "telefone": "Não informado",
+        "especialidade": "Não informado",
+        "convenio": "Não informado",
+        "descricao": "Não informado"
+    }
 
-        resposta = client.models.generate_content(
-            model=MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=300),
-        )
+    # Busca a mensagem da Sofia que contém o resumo de confirmação
+    resumo_texto = ""
+    for msg in reversed(historico):
+        if msg["role"] == "assistant" and "👤" in msg["content"] and "📱" in msg["content"]:
+            resumo_texto = msg["content"]
+            break
 
-        texto = resposta.text.strip()
-        # Remove blocos markdown se existirem
-        texto = texto.replace("```json", "").replace("```", "").strip()
-        # Extrai apenas o conteúdo entre { } caso haja texto extra
-        inicio = texto.find("{")
-        fim    = texto.rfind("}") + 1
-        if inicio >= 0 and fim > inicio:
-            texto = texto[inicio:fim]
-        return json.loads(texto)
+    if resumo_texto:
+        print(f"📋 [extrator] Resumo encontrado: {resumo_texto[:200]}")
 
-    except Exception as e:
-        print(f"⚠️ Erro ao extrair dados da triagem: {e}")
-        return {
-            "nome": "Não identificado",
-            "telefone": "Não informado",
-            "especialidade": "Não informado",
-            "convenio": "Não informado",
-            "descricao": "Não foi possível extrair automaticamente."
-        }
+        def extrair_campo(texto, emoji, proximo_emoji=None):
+            padrao = re.escape(emoji) + r"[\s\*]*[^:：]*[:：]\s*(.+)"
+            match = re.search(padrao, texto)
+            if match:
+                valor = match.group(1).strip()
+                # Remove asteriscos e texto após próximo emoji
+                valor = valor.replace("*", "").strip()
+                if proximo_emoji:
+                    idx = valor.find(proximo_emoji)
+                    if idx > 0:
+                        valor = valor[:idx].strip()
+                return valor
+            return "Não informado"
+
+        dados["nome"]          = extrair_campo(resumo_texto, "👤")
+        dados["telefone"]      = extrair_campo(resumo_texto, "📱")
+        dados["especialidade"] = extrair_campo(resumo_texto, "🩺")
+        dados["convenio"]      = extrair_campo(resumo_texto, "💳")
+        dados["descricao"]     = extrair_campo(resumo_texto, "📋")
+
+        print(f"📋 [extrator] Dados extraídos: {dados}")
+    else:
+        print("📋 [extrator] Resumo não encontrado, usando fallback com IA...")
+        try:
+            historico_texto = "\n".join(
+                f"{'Paciente' if m['role'] == 'user' else 'Sofia'}: {m['content']}"
+                for m in historico
+            )
+            prompt = f"{EXTRATOR_PROMPT}\n\nHistórico:\n{historico_texto}"
+            resposta = client.models.generate_content(
+                model=MODEL,
+                contents=prompt,
+                config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=300),
+            )
+            texto = resposta.text.strip()
+            texto = texto.replace("```json", "").replace("```", "").strip()
+            inicio = texto.find("{")
+            fim = texto.rfind("}") + 1
+            if inicio >= 0 and fim > inicio:
+                texto = texto[inicio:fim]
+            dados = json.loads(texto)
+        except Exception as e:
+            print(f"⚠️ Erro no fallback: {e}")
+
+    return dados
