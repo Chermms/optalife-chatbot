@@ -68,33 +68,64 @@ def cliente_quer_atendente(texto: str) -> bool:
 # NOTIFICA A ATENDENTE ISABELA NO WHATSAPP
 # ─────────────────────────────────────────────
 def notificar_atendente(numero_cliente: str, texto_cliente: str, triagem: dict = None):
-    """Notifica o atendente com os dados do paciente e triagem se disponível."""
-    linhas_triagem = ""
-    if triagem:
-        nome         = triagem.get("nome", "Não informado")
-        telefone     = triagem.get("telefone", "Não informado")
-        especialidade = triagem.get("especialidade", "Não informado")
-        convenio     = triagem.get("convenio", "Não informado")
-        descricao    = triagem.get("descricao", "Não informado")
-        linhas_triagem = (
-            f"\n📋 *Triagem registrada:*\n"
-            f"👤 *Nome:* {nome}\n"
-            f"📞 *Telefone:* {telefone}\n"
-            f"🩺 *Especialidade:* {especialidade}\n"
-            f"💳 *Convênio:* {convenio}\n"
-            f"📝 *Caso clínico:* {descricao}\n"
-        )
+    """Notifica o atendente por e-mail com os dados do paciente e triagem se disponível."""
+    nome          = triagem.get("nome", "Não informado") if triagem else "Não informado"
+    telefone      = triagem.get("telefone", "Não informado") if triagem else "Não informado"
+    especialidade = triagem.get("especialidade", "Não informado") if triagem else "Não informado"
+    convenio      = triagem.get("convenio", "Não informado") if triagem else "Não informado"
+    descricao     = triagem.get("descricao", "Não informado") if triagem else "Não informado"
 
-    mensagem = (
-        f"🔔 *Novo paciente aguardando atendimento!*\n\n"
-        f"📱 *Número:* +{numero_cliente}\n"
-        f"🔗 *Abrir conversa:* https://wa.me/{numero_cliente}\n"
-        f"💬 *Última mensagem:* {texto_cliente}"
-        f"{linhas_triagem}\n"
-        f"Por favor, entre em contato com o(a) paciente. 💙"
-    )
-    enviar_whatsapp(ATENDENTE_NUMERO, mensagem)
-    print(f"📣 Atendente notificada — paciente: {numero_cliente} → {ATENDENTE_NUMERO}")
+    corpo_html = f"""
+    <html><body style="font-family:Arial,sans-serif;color:#333;max-width:600px;margin:auto;">
+      <div style="background:#0a5c8a;padding:20px;border-radius:8px 8px 0 0;">
+        <h2 style="color:white;margin:0;">🔔 Paciente aguardando atendimento</h2>
+        <p style="color:#cce6f7;margin:4px 0 0 0;">Solicitação via WhatsApp</p>
+      </div>
+      <div style="background:#f4f8fb;padding:24px;border:1px solid #d0e4f0;">
+        <h3 style="color:#0a5c8a;">Dados do Paciente</h3>
+        <table style="width:100%;border-collapse:collapse;">
+          <tr><td style="padding:8px;font-weight:bold;width:40%;">Número WhatsApp:</td><td style="padding:8px;">+{numero_cliente}</td></tr>
+          <tr style="background:#e8f3fb;"><td style="padding:8px;font-weight:bold;">Link direto:</td><td style="padding:8px;"><a href="https://wa.me/{numero_cliente}">Abrir conversa</a></td></tr>
+          <tr><td style="padding:8px;font-weight:bold;">Nome:</td><td style="padding:8px;">{nome}</td></tr>
+          <tr style="background:#e8f3fb;"><td style="padding:8px;font-weight:bold;">Telefone:</td><td style="padding:8px;">{telefone}</td></tr>
+          <tr><td style="padding:8px;font-weight:bold;">Especialidade:</td><td style="padding:8px;">{especialidade}</td></tr>
+          <tr style="background:#e8f3fb;"><td style="padding:8px;font-weight:bold;">Convênio:</td><td style="padding:8px;">{convenio}</td></tr>
+        </table>
+        <h3 style="color:#0a5c8a;margin-top:24px;">Caso Clínico</h3>
+        <p style="background:white;padding:12px;border-left:4px solid #0a5c8a;border-radius:4px;">{descricao}</p>
+        <h3 style="color:#0a5c8a;margin-top:24px;">Última mensagem do paciente</h3>
+        <p style="background:white;padding:12px;border-left:4px solid #e8a020;border-radius:4px;">{texto_cliente}</p>
+      </div>
+      <div style="background:#0a5c8a;padding:14px;border-radius:0 0 8px 8px;text-align:center;">
+        <p style="color:white;margin:0;font-size:13px;">OptaLife — <a href="https://www.optalife.com.br" style="color:#cce6f7;">www.optalife.com.br</a></p>
+      </div>
+    </body></html>
+    """
+
+    resend_key = os.environ.get("RESEND_API_KEY")
+    remetente  = os.environ.get("EMAIL_REMETENTE", "contato@optalife.com.br")
+
+    try:
+        response = requests.post(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": f"Bearer {resend_key}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "from": f"OptaLife Chatbot <{remetente}>",
+                "to": ["contato@optalife.com.br"],
+                "subject": f"🔔 Paciente aguardando atendimento — {nome}",
+                "html": corpo_html
+            },
+            timeout=15
+        )
+        if response.status_code in (200, 201):
+            print(f"✅ E-mail de notificação enviado — paciente: {numero_cliente}")
+        else:
+            print(f"⚠️ Erro Resend ao notificar atendente: {response.text}")
+    except Exception as e:
+        print(f"❌ Exceção ao enviar e-mail de notificação: {e}")
 
 
 # ─────────────────────────────────────────────
