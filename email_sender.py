@@ -65,6 +65,15 @@ def enviar_triagem_por_email(triagem: dict):
                 <td style="padding: 8px; font-weight: bold;">WhatsApp (origem):</td>
                 <td style="padding: 8px;">+{numero_wa}</td>
               </tr>
+            </table>
+
+            <div style="text-align:center;margin-top:20px;margin-bottom:8px;">
+              <a href="https://wa.me/{numero_wa}" style="display:inline-block;background:#25D366;color:white;font-size:16px;font-weight:bold;padding:14px 32px;border-radius:8px;text-decoration:none;">
+                💬 Abrir conversa no WhatsApp
+              </a>
+            </div>
+
+            <table style="width: 100%; border-collapse: collapse; margin-top: 16px;">
               <tr style="background:#e8f3fb;">
                 <td style="padding: 8px; font-weight: bold;">Especialidade / Cirurgia:</td>
                 <td style="padding: 8px;">{especialidade}</td>
