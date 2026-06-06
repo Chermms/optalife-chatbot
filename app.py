@@ -75,26 +75,67 @@ def notificar_atendente(numero_cliente: str, texto_cliente: str, triagem: dict =
     convenio      = triagem.get("convenio", "Não informado") if triagem else "Não informado"
     descricao     = triagem.get("descricao", "Não informado") if triagem else "Não informado"
 
+    triagem_concluida = triagem and nome != "Não informado"
+
+    if triagem_concluida:
+        badge = '<span style="background:#1a9e5c;color:white;padding:3px 10px;border-radius:12px;font-size:13px;font-weight:bold;">✅ Triagem Completa</span>'
+        card_triagem = f"""
+        <div style="background:white;border:2px solid #1a9e5c;border-radius:8px;padding:20px;margin-top:24px;">
+          <h3 style="color:#1a9e5c;margin:0 0 16px 0;">📋 Formulário de Triagem</h3>
+          <table style="width:100%;border-collapse:collapse;">
+            <tr style="background:#f0faf5;">
+              <td style="padding:10px 12px;font-weight:bold;width:40%;color:#555;">👤 Nome completo</td>
+              <td style="padding:10px 12px;">{nome}</td>
+            </tr>
+            <tr>
+              <td style="padding:10px 12px;font-weight:bold;color:#555;">📞 Telefone</td>
+              <td style="padding:10px 12px;">{telefone}</td>
+            </tr>
+            <tr style="background:#f0faf5;">
+              <td style="padding:10px 12px;font-weight:bold;color:#555;">🩺 Especialidade / Cirurgia</td>
+              <td style="padding:10px 12px;">{especialidade}</td>
+            </tr>
+            <tr>
+              <td style="padding:10px 12px;font-weight:bold;color:#555;">💳 Convênio</td>
+              <td style="padding:10px 12px;">{convenio}</td>
+            </tr>
+          </table>
+          <div style="margin-top:14px;">
+            <p style="font-weight:bold;color:#555;margin:0 0 6px 0;">📝 Caso Clínico</p>
+            <p style="background:#f0faf5;padding:12px;border-left:4px solid #1a9e5c;border-radius:4px;margin:0;line-height:1.6;">{descricao}</p>
+          </div>
+        </div>
+        """
+    else:
+        badge = '<span style="background:#aaa;color:white;padding:3px 10px;border-radius:12px;font-size:13px;">⚠️ Triagem não realizada</span>'
+        card_triagem = """
+        <div style="background:#fff8e1;border:2px solid #f0c040;border-radius:8px;padding:16px;margin-top:24px;">
+          <p style="margin:0;color:#7a6000;">⚠️ O paciente solicitou atendente antes de concluir a triagem. Recomenda-se coletar os dados durante o atendimento.</p>
+        </div>
+        """
+
     corpo_html = f"""
     <html><body style="font-family:Arial,sans-serif;color:#333;max-width:600px;margin:auto;">
       <div style="background:#0a5c8a;padding:20px;border-radius:8px 8px 0 0;">
         <h2 style="color:white;margin:0;">🔔 Paciente aguardando atendimento</h2>
-        <p style="color:#cce6f7;margin:4px 0 0 0;">Solicitação via WhatsApp</p>
+        <p style="color:#cce6f7;margin:8px 0 0 0;">Solicitação via WhatsApp &nbsp;|&nbsp; {badge}</p>
       </div>
       <div style="background:#f4f8fb;padding:24px;border:1px solid #d0e4f0;">
-        <h3 style="color:#0a5c8a;">Dados do Paciente</h3>
+        <h3 style="color:#0a5c8a;margin-top:0;">Contato do Paciente</h3>
         <table style="width:100%;border-collapse:collapse;">
-          <tr><td style="padding:8px;font-weight:bold;width:40%;">Número WhatsApp:</td><td style="padding:8px;">+{numero_cliente}</td></tr>
-          <tr style="background:#e8f3fb;"><td style="padding:8px;font-weight:bold;">Link direto:</td><td style="padding:8px;"><a href="https://wa.me/{numero_cliente}">Abrir conversa</a></td></tr>
-          <tr><td style="padding:8px;font-weight:bold;">Nome:</td><td style="padding:8px;">{nome}</td></tr>
-          <tr style="background:#e8f3fb;"><td style="padding:8px;font-weight:bold;">Telefone:</td><td style="padding:8px;">{telefone}</td></tr>
-          <tr><td style="padding:8px;font-weight:bold;">Especialidade:</td><td style="padding:8px;">{especialidade}</td></tr>
-          <tr style="background:#e8f3fb;"><td style="padding:8px;font-weight:bold;">Convênio:</td><td style="padding:8px;">{convenio}</td></tr>
+          <tr style="background:#e8f3fb;">
+            <td style="padding:10px 12px;font-weight:bold;width:40%;">📱 Número WhatsApp</td>
+            <td style="padding:10px 12px;">+{numero_cliente}</td>
+          </tr>
         </table>
-        <h3 style="color:#0a5c8a;margin-top:24px;">Caso Clínico</h3>
-        <p style="background:white;padding:12px;border-left:4px solid #0a5c8a;border-radius:4px;">{descricao}</p>
-        <h3 style="color:#0a5c8a;margin-top:24px;">Última mensagem do paciente</h3>
-        <p style="background:white;padding:12px;border-left:4px solid #e8a020;border-radius:4px;">{texto_cliente}</p>
+        <div style="text-align:center;margin-top:20px;">
+          <a href="https://wa.me/{numero_cliente}" style="display:inline-block;background:#25D366;color:white;font-size:16px;font-weight:bold;padding:14px 32px;border-radius:8px;text-decoration:none;">
+            💬 Abrir conversa no WhatsApp
+          </a>
+        </div>
+        <h3 style="color:#0a5c8a;margin-top:24px;">💬 Última mensagem do paciente</h3>
+        <p style="background:white;padding:12px;border-left:4px solid #e8a020;border-radius:4px;margin:0;line-height:1.6;">{texto_cliente}</p>
+        {card_triagem}
       </div>
       <div style="background:#0a5c8a;padding:14px;border-radius:0 0 8px 8px;text-align:center;">
         <p style="color:white;margin:0;font-size:13px;">OptaLife — <a href="https://www.optalife.com.br" style="color:#cce6f7;">www.optalife.com.br</a></p>
