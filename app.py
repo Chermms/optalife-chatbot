@@ -177,11 +177,19 @@ def disparar_email_async(historico: list, numero: str):
     """Extrai dados da triagem e envia e-mail em background."""
     try:
         print(f"📧 [thread] Extraindo dados da triagem de {numero}...")
-        dados_triagem = extrair_dados_triagem(historico)
-        dados_triagem["numero"] = numero
+        dados_triagem = extrair_dados_triagem(historico) or {}
+        dados_triagem["numero"] = numero  # garante que o número sempre esteja presente
+        if not dados_triagem.get("nome"):
+            print(f"⚠️ [thread] Triagem sem nome para {numero}, enviando assim mesmo...")
         enviar_triagem_por_email(dados_triagem)
     except Exception as e:
         print(f"⚠️ [thread] Erro ao enviar e-mail: {e}")
+        # Fallback: envia e-mail mínimo com apenas o número para não perder o lead
+        try:
+            enviar_triagem_por_email({"numero": numero, "nome": "Não identificado"})
+            print(f"📧 [thread] E-mail fallback enviado para {numero}")
+        except Exception as e2:
+            print(f"❌ [thread] Falha total no envio de e-mail: {e2}")
 
 
 # ─────────────────────────────────────────────
