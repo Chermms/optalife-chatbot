@@ -232,9 +232,11 @@ def receber_mensagem():
                 "Claro! Vou chamar um(a) de nossos atendentes agora. 💙\n\n"
                 "Em breve ele(a) entrará em contato com você diretamente.\n\n"
                 "Caso prefira, você pode iniciar a conversa diretamente:\n"
-                "🔗 https://wa.me/5521994404545\n\n"
+                "🔗 https://wa.me/5521995506946\n"
+                "ou\n"
+                "🔗 https://wa.me/5521994404545\n"
                 "Ou ligue para um dos nossos números de atendimento:\n"
-                "(21) 96643-9937. ✅\n"
+                "(21) ‎99550-6946. ✅\n"
                 "(21) 99440-4545. ✅"            
             )
             return jsonify({"status": "encaminhado para atendente"}), 200
