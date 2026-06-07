@@ -234,7 +234,7 @@ def receber_mensagem():
                 "Caso prefira, você pode iniciar a conversa diretamente:\n"
                 "🔗 https://wa.me/5521995506946\n"
                 "ou\n"
-                "🔗 https://wa.me/5521994404545\n"
+                "🔗 https://wa.me/5521994404545\n\n"
                 "Ou ligue para um dos nossos números de atendimento:\n"
                 "(21) ‎99550-6946. ✅\n"
                 "(21) 99440-4545. ✅"            
