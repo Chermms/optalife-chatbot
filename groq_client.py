@@ -251,15 +251,39 @@ def extrair_dados_triagem(historico: list) -> dict:
             resposta = client.models.generate_content(
                 model=MODEL,
                 contents=prompt,
-                config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=300),
+                config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=500),
             )
-            texto = resposta.text.strip()
+            texto = resposta.text.strip() if resposta.text else ""
             texto = texto.replace("```json", "").replace("```", "").strip()
             inicio = texto.find("{")
             fim = texto.rfind("}") + 1
             if inicio >= 0 and fim > inicio:
                 texto = texto[inicio:fim]
-            dados = json.loads(texto)
+                dados_ia = json.loads(texto)
+                # Só atualiza campos que vieram preenchidos
+                for campo in ("nome", "telefone", "especialidade", "convenio", "descricao"):
+                    valor = dados_ia.get(campo, "").strip()
+                    if valor and valor.lower() not in ("não informado", "nao informado", ""):
+                        dados[campo] = valor
+            else:
+                print("⚠️ Fallback IA não retornou JSON válido — usando dados parciais do histórico")
+                # Extrai o que der diretamente das mensagens do usuário
+                msgs_usuario = [m["content"] for m in historico if m["role"] == "user"]
+                if len(msgs_usuario) >= 1 and dados["nome"] == "Não informado":
+                    dados["nome"] = msgs_usuario[0]
+                if len(msgs_usuario) >= 2 and dados["telefone"] == "Não informado":
+                    dados["telefone"] = msgs_usuario[1]
+                if len(msgs_usuario) >= 3 and dados["especialidade"] == "Não informado":
+                    dados["especialidade"] = msgs_usuario[2]
+        except json.JSONDecodeError as e:
+            print(f"⚠️ Erro ao parsear JSON do fallback: {e} — usando dados parciais do histórico")
+            msgs_usuario = [m["content"] for m in historico if m["role"] == "user"]
+            if len(msgs_usuario) >= 1 and dados["nome"] == "Não informado":
+                dados["nome"] = msgs_usuario[0]
+            if len(msgs_usuario) >= 2 and dados["telefone"] == "Não informado":
+                dados["telefone"] = msgs_usuario[1]
+            if len(msgs_usuario) >= 3 and dados["especialidade"] == "Não informado":
+                dados["especialidade"] = msgs_usuario[2]
         except Exception as e:
             print(f"⚠️ Erro no fallback: {e}")
 
