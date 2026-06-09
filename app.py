@@ -11,8 +11,17 @@ import threading
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from groq_client import obter_resposta_ia, triagem_foi_concluida, extrair_dados_triagem
-from memoria import salvar_mensagem, obter_historico
+from memoria import salvar_mensagem, obter_historico, limpar_historico
 from email_sender import enviar_triagem_por_email
+
+# ─────────────────────────────────────────────
+# CONTROLE DE TIMERS DE INATIVIDADE
+# Chave: número do cliente → Timer ativo
+# ─────────────────────────────────────────────
+_timers_inatividade: dict = {}
+_timers_lock = threading.Lock()
+
+TIMEOUT_INATIVIDADE_SEGUNDOS = int(os.environ.get("TIMEOUT_INATIVIDADE_SEGUNDOS", 600))  # 10 min padrão
 
 app = Flask(__name__)
 CORS(app, origins=["https://optalife.com.br", "https://www.optalife.com.br"])
@@ -193,8 +202,66 @@ def disparar_email_async(historico: list, numero: str):
 
 
 # ─────────────────────────────────────────────
-# RECEBE MENSAGENS DO WHATSAPP
+# TIMER DE INATIVIDADE — envia histórico por e-mail
+# se o paciente parar de responder sem triagem/atendente
 # ─────────────────────────────────────────────
+def _email_inatividade(numero: str):
+    """Chamado pelo timer após inatividade: envia histórico completo por e-mail."""
+    with _timers_lock:
+        _timers_inatividade.pop(numero, None)
+
+    historico = obter_historico(numero)
+    if not historico:
+        print(f"⏱️ [inatividade] Histórico vazio para {numero}, nada a enviar.")
+        return
+
+    print(f"⏱️ [inatividade] Timeout atingido para {numero}. Enviando histórico por e-mail...")
+    try:
+        dados_triagem = extrair_dados_triagem(historico) or {}
+        dados_triagem["numero"] = numero
+        dados_triagem["_origem_envio"] = "inatividade"
+        if not dados_triagem.get("nome"):
+            dados_triagem["nome"] = "Não identificado"
+        # Tenta chamar com historico (se email_sender suportar), senão chama sem
+        try:
+            enviar_triagem_por_email(dados_triagem, historico=historico)
+        except TypeError:
+            enviar_triagem_por_email(dados_triagem)
+        print(f"✅ [inatividade] E-mail com histórico enviado para {numero}.")
+
+        # Limpa o histórico — próxima interação começa conversa nova e limpa
+        limpar_historico(numero)
+        print(f"🗑️ [inatividade] Histórico de {numero} limpo após e-mail de inatividade.")
+    except Exception as e:
+        print(f"⚠️ [inatividade] Erro ao enviar e-mail de inatividade: {e}")
+        try:
+            enviar_triagem_por_email({"numero": numero, "nome": "Não identificado"})
+        except Exception as e2:
+            print(f"❌ [inatividade] Falha total: {e2}")
+
+
+def _reiniciar_timer_inatividade(numero: str):
+    """Cancela timer existente e cria um novo para o número."""
+    with _timers_lock:
+        timer_antigo = _timers_inatividade.get(numero)
+        if timer_antigo:
+            timer_antigo.cancel()
+        novo_timer = threading.Timer(TIMEOUT_INATIVIDADE_SEGUNDOS, _email_inatividade, args=(numero,))
+        novo_timer.daemon = True
+        novo_timer.start()
+        _timers_inatividade[numero] = novo_timer
+    print(f"⏱️ Timer de inatividade reiniciado para {numero} ({TIMEOUT_INATIVIDADE_SEGUNDOS}s).")
+
+
+def _cancelar_timer_inatividade(numero: str):
+    """Cancela o timer de inatividade (triagem concluída ou atendente solicitado)."""
+    with _timers_lock:
+        timer = _timers_inatividade.pop(numero, None)
+        if timer:
+            timer.cancel()
+            print(f"⏱️ Timer de inatividade cancelado para {numero} (fluxo concluído).")
+
+
 @app.route("/webhook", methods=["POST"])
 def receber_mensagem():
     data = request.get_json()
@@ -226,6 +293,9 @@ def receber_mensagem():
 
         # ── Verifica se o paciente quer falar com atendente humano ──
         if cliente_quer_atendente(texto_recebido):
+            # Cancela timer de inatividade — fluxo encerrado via atendente
+            _cancelar_timer_inatividade(numero)
+
             # Tenta extrair triagem do histórico se já foi feita
             historico_atual = obter_historico(numero)
             triagem = None
@@ -255,9 +325,15 @@ def receber_mensagem():
         resposta  = obter_resposta_ia(historico)
         salvar_mensagem(numero, "assistant", resposta)
 
+        # ── Reinicia timer de inatividade a cada troca de mensagens ──
+        _reiniciar_timer_inatividade(numero)
+
         # ── Verifica se a triagem foi concluída ──
         if triagem_foi_concluida(resposta):
             print(f"📋 Triagem concluída para {numero}. Disparando e-mail em background...")
+
+            # Cancela timer de inatividade — fluxo encerrado via triagem
+            _cancelar_timer_inatividade(numero)
 
             # Busca histórico completo incluindo a resposta final da Sofia
             historico_completo = obter_historico(numero)

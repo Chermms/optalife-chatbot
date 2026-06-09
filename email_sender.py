@@ -15,7 +15,34 @@ EMAIL_REMETENTE    = os.environ.get("EMAIL_REMETENTE", "sofia@optalife.com.br")
 EMAIL_DESTINATARIO = "contato@optalife.com.br"
 
 
-def enviar_triagem_por_email(triagem: dict):
+def _formatar_historico_html(historico: list) -> str:
+    """Converte o histórico de mensagens em bloco HTML para o e-mail."""
+    if not historico:
+        return ""
+    linhas = []
+    for msg in historico:
+        role    = msg.get("role", "")
+        content = msg.get("content", "")
+        if role == "user":
+            linhas.append(
+                f'<tr><td style="padding:8px 12px;background:#fff8e1;border-bottom:1px solid #f0e8c8;">'
+                f'<b style="color:#7a6000;">👤 Paciente:</b><br>{content}</td></tr>'
+            )
+        elif role == "assistant":
+            linhas.append(
+                f'<tr><td style="padding:8px 12px;background:#f0faf5;border-bottom:1px solid #d0ead8;">'
+                f'<b style="color:#1a6e40;">🤖 Olívia:</b><br>{content}</td></tr>'
+            )
+    return (
+        '<h3 style="color:#0a5c8a;border-bottom:1px solid #cce;padding-bottom:6px;margin-top:24px;">'
+        '💬 Histórico Completo da Conversa</h3>'
+        '<table style="width:100%;border-collapse:collapse;font-size:14px;line-height:1.5;">'
+        + "".join(linhas)
+        + "</table>"
+    )
+
+
+def enviar_triagem_por_email(triagem: dict, historico: list = None):
     """
     Envia um e-mail HTML formatado com os dados da triagem via Resend API.
     """
@@ -36,8 +63,21 @@ def enviar_triagem_por_email(triagem: dict):
         convenio      = triagem.get("convenio", "Não informado")
         descricao     = triagem.get("descricao", "Não informado")
         numero_wa     = triagem.get("numero", "Não informado")
+        origem_envio  = triagem.get("_origem_envio", "triagem")  # "triagem" ou "inatividade"
 
-        assunto = f"🩺 Nova Triagem OptaLife — {nome} ({agora})"
+        if origem_envio == "inatividade":
+            badge_assunto = "⏱️ Conversa sem triagem"
+            assunto = f"⏱️ Conversa incompleta — {nome} ({agora})"
+            badge_html = (
+                '<span style="background:#e8a020;color:white;padding:3px 10px;'
+                'border-radius:12px;font-size:13px;font-weight:bold;">'
+                '⏱️ Sem triagem — inatividade</span>'
+            )
+        else:
+            assunto = f"🩺 Nova Triagem OptaLife — {nome} ({agora})"
+            badge_html = ""
+
+        bloco_historico = _formatar_historico_html(historico) if historico else ""
 
         corpo_html = f"""
         <html>
@@ -45,7 +85,7 @@ def enviar_triagem_por_email(triagem: dict):
 
           <div style="background-color: #0a5c8a; padding: 20px; border-radius: 8px 8px 0 0;">
             <h2 style="color: white; margin: 0;">🩺 Nova Triagem — OptaLife</h2>
-            <p style="color: #cce6f7; margin: 4px 0 0 0;">Registrada em {agora}</p>
+            <p style="color: #cce6f7; margin: 4px 0 0 0;">Registrada em {agora} &nbsp; {badge_html}</p>
           </div>
 
           <div style="background-color: #f4f8fb; padding: 24px; border: 1px solid #d0e4f0;">
@@ -91,6 +131,7 @@ def enviar_triagem_por_email(triagem: dict):
                       border-radius: 4px; line-height: 1.6;">
               {descricao}
             </p>
+            {bloco_historico}
           </div>
 
           <div style="background-color: #0a5c8a; padding: 14px; border-radius: 0 0 8px 8px; text-align: center;">
