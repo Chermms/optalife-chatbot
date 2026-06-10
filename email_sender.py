@@ -8,7 +8,7 @@
 
 import os
 import requests
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 RESEND_API_KEY     = os.environ.get("RESEND_API_KEY")
 EMAIL_REMETENTE    = os.environ.get("EMAIL_REMETENTE", "sofia@optalife.com.br")
@@ -56,7 +56,8 @@ def enviar_triagem_por_email(triagem: dict, historico: list = None):
         return False
 
     try:
-        agora         = datetime.now().strftime("%d/%m/%Y às %H:%M")
+        BRT = timezone(timedelta(hours=-3))
+        agora         = datetime.now(BRT).strftime("%d/%m/%Y às %H:%M")
         nome          = triagem.get("nome", "Não informado")
         telefone      = triagem.get("telefone", triagem.get("numero", "Não informado"))
         especialidade = triagem.get("especialidade", "Não informado")

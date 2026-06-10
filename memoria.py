@@ -9,7 +9,7 @@
 import sqlite3
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # ── Arquivo do banco de dados ──
 DB_PATH = os.environ.get("DB_PATH", "/tmp/optalife_conversas.db")
@@ -53,7 +53,8 @@ def salvar_mensagem(numero: str, role: str, conteudo: str):
     if len(mensagens) > MAX_MENSAGENS:
         mensagens = mensagens[-MAX_MENSAGENS:]
 
-    agora = datetime.now().isoformat()
+    BRT = timezone(timedelta(hours=-3))
+    agora = datetime.now(BRT).isoformat()
 
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("""
@@ -90,7 +91,10 @@ def obter_historico(numero: str) -> list:
     # Verifica inatividade
     try:
         ultima = datetime.fromisoformat(ultima_str)
-        if datetime.now() - ultima > timedelta(hours=HORAS_INATIVIDADE):
+        # Garante que ultima seja tz-aware (registros antigos sem offset)
+        if ultima.tzinfo is None:
+            ultima = ultima.replace(tzinfo=timezone(timedelta(hours=-3)))
+        if datetime.now(BRT) - ultima > timedelta(hours=HORAS_INATIVIDADE):
             print(f"🔄 Histórico de {numero} expirado. Iniciando nova conversa.")
             limpar_historico(numero)
             return []
