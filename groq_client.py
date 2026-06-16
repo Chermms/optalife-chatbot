@@ -32,7 +32,7 @@ ESPECIALIDADES ATENDIDAS
 Cirurgia da Coluna Vertebral, Neurocirurgia Geral, Neurocirurgia Oncológica,
 Neurocirurgia Pediátrica, Neurocirurgia Funcional, Hérnia de Disco,
 Escoliose, Espondilolistese, Nervos Periféricos, Cirurgia da Dor,
-Distúrbios do Movimento (Parkinson), Epilepsia, Lesão Traumática.
+Distúrbios do Movimento (Parkinson), Epilepsia, Lesão Traumática, Ombro, Joelho, Quadril.
 
 ═══════════════════════════════════════════
 FLUXO DE ATENDIMENTO
