@@ -13,6 +13,7 @@ from flask_cors import CORS
 from groq_client import obter_resposta_ia, triagem_foi_concluida, extrair_dados_triagem
 from memoria import salvar_mensagem, obter_historico, limpar_historico
 from email_sender import enviar_triagem_por_email
+from triagens import salvar_triagem
 
 # ─────────────────────────────────────────────
 # CONTROLE DE TIMERS DE INATIVIDADE
@@ -338,6 +339,13 @@ def receber_mensagem():
             # Busca histórico completo incluindo a resposta final da Sofia
             historico_completo = obter_historico(numero)
 
+            # ── Persiste a triagem estruturada para alimentar o painel interno ──
+            try:
+                dados_triagem = extrair_dados_triagem(historico_completo)
+                salvar_triagem(numero, dados_triagem, origem="whatsapp")
+            except Exception as e:
+                print(f"⚠️ Falha ao salvar triagem estruturada de {numero}: {e}")
+
             # ✅ Roda em thread separada — não trava o webhook
             t = threading.Thread(
                 target=disparar_email_async,
@@ -381,6 +389,24 @@ def receber_triagem_site():
         descricao    = data.get("descricao", "Não informado")
         origem       = data.get("origem", "Site")
         agora        = datetime.now().strftime("%d/%m/%Y às %H:%M")
+
+        # ── Persiste a triagem estruturada para alimentar o painel interno ──
+        try:
+            numero_identificador = telefone if telefone != "Não informado" else f"site-{email}"
+            salvar_triagem(
+                numero_identificador,
+                {
+                    "nome": nome,
+                    "telefone": telefone,
+                    "email": email,
+                    "especialidade": cirurgia,
+                    "convenio": convenio,
+                    "descricao": descricao,
+                },
+                origem="site"
+            )
+        except Exception as e:
+            print(f"⚠️ Falha ao salvar triagem estruturada do site: {e}")
 
         corpo_html = f"""
         <html><body style="font-family:Arial,sans-serif;color:#333;max-width:600px;margin:auto;">
