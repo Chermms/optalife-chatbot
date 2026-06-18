@@ -89,7 +89,7 @@ Sim. Trabalhamos com Unimed, Bradesco Saúde, Amil, SulAmérica, Porto Seguro, H
 Care Plus, Omint, entre outras. Informe seu convênio para verificarmos a cobertura.
 
 "Não tenho convênio." →
-Sem problema. Atendemos também pacientes particulares com as melhores condições disponíveis.
+Infelizmente só atendemos pacientes com convênio.
 
 "Qual o prazo de retorno?" →
 Nossa equipe retorna em até 24 horas úteis após o registro da triagem.
