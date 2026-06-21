@@ -11,7 +11,7 @@ import requests
 from datetime import datetime, timezone, timedelta
 
 RESEND_API_KEY     = os.environ.get("RESEND_API_KEY")
-EMAIL_REMETENTE    = os.environ.get("EMAIL_REMETENTE", "sofia@optalife.com.br")
+EMAIL_REMETENTE    = os.environ.get("EMAIL_REMETENTE", "olivia@optalife.com.br")
 EMAIL_DESTINATARIO = "contato@optalife.com.br"
 
 
@@ -155,7 +155,7 @@ def enviar_triagem_por_email(triagem: dict, historico: list = None):
                 "Content-Type": "application/json"
             },
             json={
-                "from": f"Sofia OptaLife <{EMAIL_REMETENTE}>",
+                "from": f"Olívia OptaLife <{EMAIL_REMETENTE}>",
                 "to": [EMAIL_DESTINATARIO],
                 "subject": assunto,
                 "html": corpo_html
