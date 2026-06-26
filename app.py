@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║          CHATBOT OPTALIFE — WhatsApp + Groq AI               ║
+║      CHATBOT OPTALIFE — WhatsApp + Groq(Atualmente Gemini)   ║
 ║          Arquivo principal: app.py                           ║
 ╚══════════════════════════════════════════════════════════════╝
 """
@@ -23,6 +23,16 @@ _timers_inatividade: dict = {}
 _timers_lock = threading.Lock()
 
 TIMEOUT_INATIVIDADE_SEGUNDOS = int(os.environ.get("TIMEOUT_INATIVIDADE_SEGUNDOS", 600))  # 10 min padrão
+
+# ─────────────────────────────────────────────
+# BLOCKLIST — números bloqueados permanentemente
+# Configure via variável de ambiente no Render:
+# NUMEROS_BLOQUEADOS=5511999910621,5511888887777
+# ─────────────────────────────────────────────
+_numeros_bloqueados_raw = os.environ.get("NUMEROS_BLOQUEADOS", "")
+NUMEROS_BLOQUEADOS: set = set(
+    n.strip() for n in _numeros_bloqueados_raw.split(",") if n.strip()
+)
 
 app = Flask(__name__)
 CORS(app, origins=["https://optalife.com.br", "https://www.optalife.com.br"])
@@ -279,7 +289,10 @@ def receber_mensagem():
         numero       = mensagem_obj["from"]
         tipo         = mensagem_obj["type"]
 
-        message_id = mensagem_obj.get("id", "")
+        # ── Bloqueia números na lista negra ──
+        if numero in NUMEROS_BLOQUEADOS:
+            print(f"🚫 Mensagem bloqueada — número na blocklist: {numero}")
+            return jsonify({"status": "bloqueado"}), 200
         print(f"📩 [{message_id}] Mensagem de {numero} ({tipo})")
 
         if tipo != "text":
